@@ -26,6 +26,38 @@ jobs:
       - name: Run tests
         run: npm run test:api
 
+  secrets-demo:
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/master'  # Seulement sur la branche master
+
+    steps:
+      - name: Display workflow context
+        run: |
+          echo "🔍 Informations du workflow:"
+          echo "Repository: ${{ github.repository }}"
+          echo "Triggered by: ${{ github.actor }}"
+          echo "Commit SHA: ${{ github.sha }}"
+          echo "Branch: ${{ github.ref_name }}"
+          echo "Event: ${{ github.event_name }}"
+          echo "Run ID: ${{ github.run_id }}"
+          echo "Run Number: ${{ github.run_number }}"
+
+      - name: Check automatic GITHUB_TOKEN
+        run: |
+          echo "✅ GITHUB_TOKEN est disponible automatiquement"
+          echo "Token (masqué): ${{ secrets.GITHUB_TOKEN }}"
+
+      - name: Check custom secret (optional)
+        run: |
+          if [ -z "$MY_SECRET" ]; then
+            echo "ℹ️  Secret MY_SECRET n'est pas configuré (c'est normal pour la démo)"
+          else
+            echo "✅ Secret MY_SECRET est configuré"
+            echo "Valeur masquée: $MY_SECRET"
+          fi
+        env:
+          MY_SECRET: ${{ secrets.MY_SECRET }}
+
   build:
     runs-on: ubuntu-latest
     needs: test  # Ce job attend que 'test' soit terminé avec succès
