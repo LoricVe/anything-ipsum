@@ -1,23 +1,16 @@
+/**
+ * Serveur de test simplifié pour les tests API
+ * Cette version isole les endpoints API sans SSR Angular
+ */
+
+const express = require('express');
+const cors = require('cors');
+const rateLimit = require('express-rate-limit');
+
 // Configuration des variables d'environnement
-import {config} from 'dotenv';
-
-config();
-
-import {
-  AngularNodeAppEngine,
-  createNodeRequestHandler,
-  isMainModule,
-  writeResponseToNodeResponse,
-} from '@angular/ssr/node';
-import express from 'express';
-import {join} from 'node:path';
-import cors from 'cors';
-import rateLimit from 'express-rate-limit';
-
-const browserDistFolder = join(import.meta.dirname, '../browser');
+require('dotenv').config();
 
 const app = express();
-const angularApp = new AngularNodeAppEngine();
 
 // Temps de démarrage du serveur
 const serverStartTime = Date.now();
@@ -27,7 +20,7 @@ app.use(express.json());
 
 // Configuration CORS
 app.use(cors({
-  origin: process.env['APP_URL'],
+  origin: process.env.APP_URL,
   credentials: true
 }));
 
@@ -43,7 +36,7 @@ const apiLimiter = rateLimit({
 // Health check endpoint
 app.get('/api/health', (req, res) => {
   const uptime = Math.floor((Date.now() - serverStartTime) / 1000); // uptime en secondes
-  const apiKey = process.env['MISTRAL_API_KEY'];
+  const apiKey = process.env.MISTRAL_API_KEY;
   const ai_connection = !!(apiKey && apiKey !== 'your_mistral_api_key_here');
 
   res.json({
@@ -54,53 +47,47 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-
 // API endpoint pour générer le lorem ipsum
-app.post('/api/generate-lorem', apiLimiter, async (req, res): Promise<void> => {
+app.post('/api/generate-lorem', apiLimiter, async (req, res) => {
   try {
     const {theme, paragraphs, paragraphLength, stream = true} = req.body;
 
     // Validation des paramètres
     if (!theme || !theme.trim()) {
-      res.status(400).json({
+      return res.status(400).json({
         success: false,
         error: 'Le thème est requis'
       });
-      return;
     }
 
     if (!paragraphs || paragraphs < 1) {
-      res.status(400).json({
+      return res.status(400).json({
         success: false,
         error: 'Le nombre de paragraphes doit être supérieur à 0'
       });
-      return;
     }
 
     // Validation stricte de la longueur de paragraphe
-    type ParagraphLength = 'court' | 'moyen' | 'long' | 'variable';
-    const validLengths: ParagraphLength[] = ['court', 'moyen', 'long', 'variable'];
+    const validLengths = ['court', 'moyen', 'long', 'variable'];
 
     if (!paragraphLength || !validLengths.includes(paragraphLength)) {
-      res.status(400).json({
+      return res.status(400).json({
         success: false,
         error: 'La taille de paragraphe doit être : court, moyen, long ou variable'
       });
-      return;
     }
 
     // Vérification de la clé API
-    const apiKey = process.env['MISTRAL_API_KEY'];
+    const apiKey = process.env.MISTRAL_API_KEY;
     if (!apiKey || apiKey === 'your_mistral_api_key_here') {
-      res.status(500).json({
+      return res.status(500).json({
         success: false,
         error: 'Clé API Mistral non configurée'
       });
-      return;
     }
 
-    // Mapping des tailles vers instructions avec typage strict
-    const lengthInstructions: Record<ParagraphLength, string> = {
+    // Mapping des tailles vers instructions
+    const lengthInstructions = {
       'court': 'environ 1-10 phrases par paragraphe',
       'moyen': 'environ 10-20 phrases par paragraphe',
       'long': 'environ 20-30 phrases par paragraphe',
@@ -109,7 +96,7 @@ app.post('/api/generate-lorem', apiLimiter, async (req, res): Promise<void> => {
 
     // Préparation du prompt pour Mistral
     const prompt = `Génère un faux texte de type "lorem ipsum" sur le thème "${theme}".
-Le texte doit contenir ${paragraphs} paragraphe(s), avec ${lengthInstructions[paragraphLength as ParagraphLength]}.
+Le texte doit contenir ${paragraphs} paragraphe(s), avec ${lengthInstructions[paragraphLength]}.
 
 Règles importantes :
 - Utilise un vocabulaire et des références liés au thème "${theme}"
@@ -118,7 +105,7 @@ Règles importantes :
 - Commence chaque paragraphe par une majuscule
 - Assure-toi que le texte soit cohérent avec le thème choisi
 - Le résultat doit être du texte de remplissage, pas du contenu informatif réel
-- Respecte bien la consigne de longueur : ${lengthInstructions[paragraphLength as ParagraphLength]}
+- Respecte bien la consigne de longueur : ${lengthInstructions[paragraphLength]}
 
 Réponds uniquement avec le texte généré, sans commentaires ni explications.`;
 
@@ -149,11 +136,10 @@ Réponds uniquement avec le texte généré, sans commentaires ni explications.`
     if (!response.ok) {
       const errorData = await response.text();
       console.error('Erreur API Mistral:', response.status, errorData);
-      res.status(500).json({
+      return res.status(500).json({
         success: false,
         error: 'Erreur lors de la génération du texte'
       });
-      return;
     }
 
     if (stream) {
@@ -166,8 +152,7 @@ Réponds uniquement avec le texte généré, sans commentaires ni explications.`
 
       // Stream la réponse
       if (!response.body) {
-        res.status(500).end('Erreur: pas de corps de réponse');
-        return;
+        return res.status(500).end('Erreur: pas de corps de réponse');
       }
 
       const reader = response.body.getReader();
@@ -176,14 +161,14 @@ Réponds uniquement avec le texte généré, sans commentaires ni explications.`
       try {
         while (true) {
           const { done, value } = await reader.read();
-          
+
           if (done) {
             break;
           }
 
           const chunk = decoder.decode(value, { stream: true });
           const lines = chunk.split('\n');
-          
+
           for (const line of lines) {
             if (line.startsWith('data: ')) {
               const data = line.slice(6);
@@ -191,7 +176,7 @@ Réponds uniquement avec le texte généré, sans commentaires ni explications.`
                 res.end();
                 return;
               }
-              
+
               try {
                 const parsed = JSON.parse(data);
                 const content = parsed.choices?.[0]?.delta?.content;
@@ -216,11 +201,10 @@ Réponds uniquement avec le texte généré, sans commentaires ni explications.`
       const generatedText = data.choices[0]?.message?.content;
 
       if (!generatedText) {
-        res.status(500).json({
+        return res.status(500).json({
           success: false,
           error: 'Aucun texte généré'
         });
-        return;
       }
 
       // Post-traitement pour nettoyer le texte généré
@@ -243,50 +227,4 @@ Réponds uniquement avec le texte généré, sans commentaires ni explications.`
   }
 });
 
-/**
- * Serve static files from /browser
- */
-app.use(
-  express.static(browserDistFolder, {
-    maxAge: '1y',
-    index: false,
-    redirect: false,
-  }),
-);
-
-/**
- * Handle all other requests by rendering the Angular application.
- */
-app.use((req, res, next) => {
-  angularApp
-    .handle(req)
-    .then((response) =>
-      response ? writeResponseToNodeResponse(response, res) : next(),
-    )
-    .catch(next);
-});
-
-/**
- * Start the server if this module is the main entry point.
- * The server listens on the port defined by the `PORT` environment variable, or defaults to 4000.
- */
-if (isMainModule(import.meta.url)) {
-  const port = process.env['PORT'] || 4000;
-  app.listen(port, (error) => {
-    if (error) {
-      throw error;
-    }
-
-    console.log(`Node Express server listening on http://localhost:${port}`);
-  });
-}
-
-/**
- * Request handler used by the Angular CLI (for dev-server and during build) or Firebase Cloud Functions.
- */
-export const reqHandler = createNodeRequestHandler(app);
-
-/**
- * Export app for testing purposes
- */
-export default app;
+module.exports = app;
