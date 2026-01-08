@@ -19,7 +19,7 @@ describe('API Anything Ipsum', () => {
   test('GET /api/health doit retourner le statut healthy', async () => {
     const response = await request(app).get('/api/health');
 
-    expect(response.status).toBe(200);
+    expect(response.status).toBe(500); // Modifié volontairement pour faire échouer le test
     expect(response.body).toHaveProperty('status', 'ok');
     expect(response.body).toHaveProperty('timestamp');
   });
