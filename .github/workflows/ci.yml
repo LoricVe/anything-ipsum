@@ -97,30 +97,34 @@ jobs:
     if: github.ref == 'refs/heads/master'  # Seulement sur la branche master
 
     steps:
-      - name: Set lowercase repository name
-        id: repo_name
-        run: echo "repository=$(echo ${{ github.repository }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
-
       - name: Deploy to VPS
         uses: appleboy/ssh-action@master
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_ACTOR: ${{ github.actor }}
+          IMAGE_NAME: ghcr.io/loricve/anything-ipsum:latest
+          MISTRAL_KEY: ${{ secrets.MISTRAL_API_KEY }}
+          VPS_HOST: ${{ secrets.VPS_HOST }}
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_KEY }}
+          envs: GITHUB_TOKEN,GITHUB_ACTOR,IMAGE_NAME,MISTRAL_KEY,VPS_HOST
           script: |
             echo "🚀 Starting deployment..."
+            echo "📦 Image: $IMAGE_NAME"
 
             # Login to GitHub Container Registry
-            echo ${{ secrets.GITHUB_TOKEN }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+            echo "$GITHUB_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
 
             # Pull de la nouvelle image
             echo "📦 Pulling new Docker image..."
-            docker pull ghcr.io/${{ steps.repo_name.outputs.repository }}:latest
+            docker pull "$IMAGE_NAME"
 
             # Arrêt et suppression du conteneur existant (si présent)
             echo "🔄 Stopping existing container..."
-            docker stop anything-ipsum || true
-            docker rm anything-ipsum || true
+            docker stop anything-ipsum 2>/dev/null || true
+            docker rm anything-ipsum 2>/dev/null || true
 
             # Nettoyage des anciennes images
             echo "🧹 Cleaning up old images..."
@@ -131,16 +135,23 @@ jobs:
             docker run -d \
               --name anything-ipsum \
               -p 80:4000 \
-              -e MISTRAL_API_KEY=${{ secrets.MISTRAL_API_KEY }} \
-              -e APP_URL=http://${{ secrets.VPS_HOST }} \
+              -e MISTRAL_API_KEY="$MISTRAL_KEY" \
+              -e APP_URL="http://$VPS_HOST" \
               -e NODE_ENV=production \
               --restart unless-stopped \
-              ghcr.io/${{ steps.repo_name.outputs.repository }}:latest
+              "$IMAGE_NAME"
 
             # Vérification du déploiement
             echo "✅ Waiting for container to start..."
             sleep 5
-            docker ps | grep anything-ipsum
 
-            echo "🎉 Deployment completed successfully!"
-            echo "🌐 Application available at: http://${{ secrets.VPS_HOST }}"
+            if docker ps | grep -q anything-ipsum; then
+              echo "🎉 Deployment completed successfully!"
+              echo "🌐 Application available at: http://$VPS_HOST"
+              docker ps | grep anything-ipsum
+            else
+              echo "❌ Container failed to start"
+              echo "📋 Recent logs:"
+              docker logs anything-ipsum 2>&1 | tail -20
+              exit 1
+            fi
